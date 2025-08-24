@@ -22,7 +22,9 @@ public class QuestCommand implements CommandExecutor {
             return true;
         }
 
-        QuestMenu.open(player, plugin.getQuestManager());
+        QuestMenu menu = new QuestMenu(plugin.getQuestManager());
+        menu.open(player);
+
         return true;
     }
 }

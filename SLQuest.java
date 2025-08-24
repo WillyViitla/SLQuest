@@ -1,6 +1,7 @@
 package com.slquest;
 
 import com.slquest.commands.*;
+import com.slquest.listeners.QuestGuiListener;
 import com.slquest.listeners.QuestListener;
 import com.slquest.menu.QuestMenu;
 import com.slquest.quests.QuestManager;
@@ -18,13 +19,13 @@ public class SLQuest extends JavaPlugin {
         instance = this;
         this.questManager = new QuestManager(this);
 
-        getCommand("quest").setExecutor(new QuestCommand(this));
         getCommand("questcreate").setExecutor(new QuestCreateCommand(questManager));
         getCommand("questflags").setExecutor(new QuestFlagsCommand());
         getCommand("questreroll").setExecutor(new QuestRerollCommand(questManager));
 
         getCommand("quest").setExecutor(new QuestCommand(this));
         getServer().getPluginManager().registerEvents(new QuestListener(questManager), this);
+        getServer().getPluginManager().registerEvents(new QuestGuiListener(questManager), this);
 
         questManager.loadData();
 

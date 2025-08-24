@@ -40,9 +40,8 @@ public class QuestRerollTask implements Runnable {
 
         // Remove expired quests and optionally generate new ones
         for (int tier : expiredTiers) {
-            manager.getActiveQuests().remove(tier);
-            plugin.getLogger().info("§eКвест тира " + tier + " истёк и был сброшен.");
-            // Optionally: create a new random quest for this tier here
+            manager.rerollQuest(null, tier);
+            plugin.getLogger().info("§eКвест тира " + tier + " истёк и был пересброшен.");
         }
 
         manager.saveData();

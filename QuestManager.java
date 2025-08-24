@@ -18,8 +18,19 @@ public class QuestManager {
     private final SLQuest plugin;
     private final Map<Integer, Quest> activeQuests = new HashMap<>();
     private final Map<UUID, QuestProgress> playerQuests = new HashMap<>();
+    private final Map<Integer, List<Quest>> allQuests = new HashMap<>();
     private final File dataFile;
     private final YamlConfiguration data;
+
+    private final Map<Player, Quest> activeQuestsByPlayer = new HashMap<>();
+
+    public void assignQuestToPlayer(Player player, Quest quest) {
+        activeQuestsByPlayer.put(player, quest);
+    }
+
+    public Quest getActiveQuest(Player player) {
+        return activeQuestsByPlayer.get(player);
+    }
 
     public QuestManager(SLQuest plugin) {
         this.plugin = plugin;
@@ -30,6 +41,18 @@ public class QuestManager {
     public void setQuest(Quest quest) {
         activeQuests.put(quest.getTier(), quest);
         saveData();
+    }
+
+    public Quest getQuestByDisplayName(String displayName) {
+        for (Quest quest : activeQuests.values()) {
+            if (("§e" + quest.getName()).equals(displayName)) return quest;
+        }
+        return null;
+    }
+
+    public void addQuestToPool(Quest quest) {
+        allQuests.computeIfAbsent(quest.getTier(), k -> new ArrayList<>()).add(quest);
+        saveData(); // persist later if you want
     }
 
     public Quest getQuest(int tier) {
@@ -65,14 +88,25 @@ public class QuestManager {
     }
 
     public void rerollAllQuests() {
-        activeQuests.clear();
+        for (int tier = 1; tier <= 3; tier++) {
+            rerollQuest(null, tier);
+        }
         saveData();
     }
 
     public void rerollQuest(Player player, int tier) {
-        activeQuests.remove(tier);
-        saveData();
+        List<Quest> pool = allQuests.getOrDefault(tier, Collections.emptyList());
+        if (pool.isEmpty()) {
+            if (player != null) player.sendMessage("§cНет доступных квестов для тира " + tier + "!");
+            return;
+        }
+        Quest newQ = pool.get(new Random().nextInt(pool.size()));
+        setQuest(newQ);  // <--- must put into activeQuests
+        if (player != null) {
+            player.sendMessage("§aВам доступен новый квест тира " + tier + "!");
+        }
     }
+
 
     public Map<Integer, Quest> getActiveQuests() {
         return activeQuests;
@@ -82,20 +116,38 @@ public class QuestManager {
         try {
             data.set("quests", null);
             for (Map.Entry<Integer, Quest> entry : activeQuests.entrySet()) {
-                Quest q = entry.getValue();
                 String path = "quests." + entry.getKey();
-                data.set(path + ".name", q.getName());
-                data.set(path + ".flag", q.getFlag());
-                data.set(path + ".target", q.getTarget());
-                data.set(path + ".amount", q.getAmount());
-                data.set(path + ".rewardItem", q.getRewardItem());
-                data.set(path + ".rewardAmount", q.getRewardAmount());
-                data.set(path + ".durationDays", q.getDurationDays());
+                saveQuest(path, entry.getValue());
             }
+
+            // save quest pool
+            data.set("questpool", null);
+            for (Map.Entry<Integer, List<Quest>> entry : allQuests.entrySet()) {
+                int tier = entry.getKey();
+                int index = 0;
+                for (Quest q : entry.getValue()) {
+                    String path = "questpool." + tier + "." + index;
+                    saveQuest(path, q);
+                    index++;
+                }
+            }
+
             data.save(dataFile);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void saveQuest(String path, Quest q) {
+        data.set(path + ".name", q.getName());
+        data.set(path + ".flag", q.getFlag());
+        data.set(path + ".target", q.getTarget());
+        data.set(path + ".amount", q.getAmount());
+        data.set(path + ".rewardItem", q.getRewardItem());
+        data.set(path + ".rewardAmount", q.getRewardAmount());
+        data.set(path + ".durationDays", q.getDurationDays());
+        data.set(path + ".startTime", q.getAdditionalData()
+                .getOrDefault("startTime", String.valueOf(System.currentTimeMillis())));
     }
 
     public static void open(Player player, QuestManager manager) {
@@ -121,20 +173,51 @@ public class QuestManager {
 
     public void loadData() {
         activeQuests.clear();
-        if (!data.contains("quests")) return;
-        for (String key : data.getConfigurationSection("quests").getKeys(false)) {
-            String path = "quests." + key;
-            Quest q = new Quest(
-                    Integer.parseInt(key),
-                    data.getString(path + ".name"),
-                    data.getString(path + ".flag"),
-                    data.getString(path + ".target"),
-                    data.getInt(path + ".amount"),
-                    data.getString(path + ".rewardItem"),
-                    data.getInt(path + ".rewardAmount"),
-                    data.getLong(path + ".durationDays")
-            );
-            activeQuests.put(q.getTier(), q);
+        allQuests.clear();
+
+        // load active quests
+        if (data.contains("quests")) {
+            for (String key : data.getConfigurationSection("quests").getKeys(false)) {
+                String path = "quests." + key;
+                Quest q = loadQuest(path, Integer.parseInt(key));
+                activeQuests.put(q.getTier(), q);
+            }
         }
+
+        // load quest pool
+        if (data.contains("questpool")) {
+            for (String tierKey : data.getConfigurationSection("questpool").getKeys(false)) {
+                int tier = Integer.parseInt(tierKey);
+                List<Quest> pool = new ArrayList<>();
+                for (String idx : data.getConfigurationSection("questpool." + tierKey).getKeys(false)) {
+                    String path = "questpool." + tierKey + "." + idx;
+                    pool.add(loadQuest(path, tier));
+                }
+                allQuests.put(tier, pool);
+            }
+        }
+
+        // ensure actives exist
+        for (int tier = 1; tier <= 3; tier++) {
+            if (!activeQuests.containsKey(tier) && allQuests.containsKey(tier) && !allQuests.get(tier).isEmpty()) {
+                Quest fallback = allQuests.get(tier).get(0); // pick first (or random)
+                activeQuests.put(tier, fallback);
+            }
+        }
+    }
+
+    private Quest loadQuest(String path, int tier) {
+        Quest q = new Quest(
+            tier,
+            data.getString(path + ".name"),
+            data.getString(path + ".flag"),
+            data.getString(path + ".target"),
+            data.getInt(path + ".amount"),
+            data.getString(path + ".rewardItem"),
+            data.getInt(path + ".rewardAmount"),
+            data.getLong(path + ".durationDays")
+        );
+        q.setData("startTime", data.getString(path + ".startTime", String.valueOf(System.currentTimeMillis())));
+        return q;
     }
 }

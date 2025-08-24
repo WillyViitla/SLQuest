@@ -50,6 +50,9 @@ public class QuestCreateCommand implements CommandExecutor {
             };
 
             Quest quest = new Quest(tier, name, flag, target, amount, rewardItem, rewardAmount, durationDays);
+            quest.setData("startTime", String.valueOf(System.currentTimeMillis()));
+
+            manager.addQuestToPool(quest);
             manager.setQuest(quest);
 
             sender.sendMessage("§aКвест создан!");

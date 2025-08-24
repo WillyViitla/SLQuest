@@ -1,0 +1,17 @@
+name: SLQuest
+version: 1.2
+main: com.slquest.SLQuest
+api-version: 1.20
+commands:
+  quest:
+    description: Открыть меню квестов
+    usage: /quest
+  questcreate:
+    description: Создать квест
+    usage: /questcreate
+  questflags:
+    description: Показать список флагов
+    usage: /questflags
+  questreroll:
+    description: Пересбросить квесты
+    usage: /questreroll [player] [tier]
